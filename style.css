@@ -100,7 +100,7 @@ body.hurt #app:after{content:"";position:absolute;inset:0;pointer-events:none;bo
 @media (max-height:430px){.pile small{display:none}.info{min-height:44px;font-size:15px}.pile{height:25vh}.c{height:37vh}.pl{padding:5px 10px 5px 6px}.mini{width:38px;height:50px}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
-.big{flex:1;min-width:140px;padding:14px 10px;background:linear-gradient(180deg,#2a0d11,#12080a);border:1px solid var(--gold);border-radius:4px;font-family:'Noto Serif Thai',serif;font-weight:800;font-size:20px;color:var(--fg)}
+.big{flex:0 1 420px;min-width:200px;padding:14px 10px;background:linear-gradient(180deg,#2a0d11,#12080a);border:1px solid var(--gold);border-radius:4px;font-family:'Noto Serif Thai',serif;font-weight:800;font-size:20px;color:var(--fg)}
 .big small{display:block;font-family:'Sarabun',sans-serif;font-weight:400;font-size:13px;color:var(--mut)}
 .links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap}
 .inp{display:block;width:100%;margin:6px 0;padding:11px;background:#1a0d10;border:1px solid var(--gold);border-radius:3px;color:var(--fg);font:inherit;font-size:17px}
