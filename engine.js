@@ -89,14 +89,14 @@ const mini = c => ({ id: c.id, img: c.img, key: c.key, name: c.name, r: c.r, v: 
 function mkSeat(s) {
   return { uid: s.uid || null, name: s.name, bot: !!s.bot, hp: MAXHP, soul: 0, shield: 0, curse: 0, noDraw: false, noExtra: false, skip: false, bleed: 0, sealed: 0, reflectAll: false, reflectN: 0, blockAtk: false, blockAny: false, ward: 0, redirect: false, boost: 0, showAll: 0, shown: [], alive: true, afk: 0 };
 }
-function log(G, t) { G.log.unshift(t); if (G.log.length > 12) G.log.length = 12; }
+function log(G, c, o) { G.log.unshift(Object.assign({ c }, o || {})); if (G.log.length > 12) G.log.length = 12; }
 function pop(G, i, txt) { G.evt.push({ i, txt }); }
 function pull(G) { if (!G.deck.length) { G.deck = shuffle(G.discard); G.discard = []; } return G.deck.pop(); }
 function draw(G, i, n = 1) { while (n--) { const c = pull(G); if (!c) return; G.hands[i].push(c); } }
-function xdraw(G, i, n) { const s = G.seats[i]; if (s.noExtra) { log(G, `${s.name} จั่วเพิ่มไม่ได้`); return false; } draw(G, i, n); return true; }
+function xdraw(G, i, n) { const s = G.seats[i]; if (s.noExtra) { log(G, 'noextra', { a: s.name }); return false; } draw(G, i, n); return true; }
 
 function newGame(o) {
-  const G = { mode: o.mode, fee: o.fee, seats: o.seats.map(mkSeat), deck: newDeck(), discard: [], exiled: [], pending: null, watch: !!o.watch, hands: {}, turn: 0, dir: 1, log: ['เกมเริ่มแล้ว'], last: null, over: null, evt: [], seq: 0, deadline: 0 };
+  const G = { mode: o.mode, fee: o.fee, seats: o.seats.map(mkSeat), deck: newDeck(), discard: [], exiled: [], pending: null, watch: !!o.watch, hands: {}, turn: 0, dir: 1, log: [{ c: 'start' }], last: null, over: null, evt: [], seq: 0, deadline: 0 };
   G.seats.forEach((_, i) => { G.hands[i] = []; });
   G.seats.forEach((_, i) => draw(G, i, 5));
   const n = G.seats.length; G.turn = ((Math.random() * n | 0) + n - 1) % n;
@@ -110,13 +110,13 @@ function advance(G, now) {
     do { G.turn = (G.turn + G.dir + n) % n; } while (!G.seats[G.turn].alive);
     const i = G.turn, s = G.seats[i];
     if (s.bleed > 0) {
-      const b = s.bleed; s.bleed = 0; s.hp = Math.max(0, s.hp - b); pop(G, i, '-' + b); log(G, `${s.name} เสีย ${b} HP จากคำสาปเลือด`);
+      const b = s.bleed; s.bleed = 0; s.hp = Math.max(0, s.hp - b); pop(G, i, '-' + b); log(G, 'bleed', { a: s.name, n: b });
       if (s.hp <= 0) die(G, i, null);
       checkOver(G); if (G.over) return; if (!s.alive) continue;
     }
-    if (s.noDraw) { s.noDraw = false; log(G, `${s.name} ไม่ได้จั่วไพ่`); } else draw(G, i, 1);
-    log(G, `เทิร์นของ ${s.name}`);
-    if (s.skip) { s.skip = false; log(G, `${s.name} ตาพร่า ข้ามการเล่นไพ่`); trim(G, i); tick(G, i); continue; }
+    if (s.noDraw) { s.noDraw = false; log(G, 'nodraw', { a: s.name }); } else draw(G, i, 1);
+    log(G, 'turn', { a: s.name });
+    if (s.skip) { s.skip = false; log(G, 'skip', { a: s.name }); trim(G, i); tick(G, i); continue; }
     G.deadline = s.bot ? 0 : now + TURN_MS;
     return;
   }
@@ -124,26 +124,26 @@ function advance(G, now) {
 function kill(G, ti, si) {
   const t = G.seats[ti]; t.alive = false; t.hp = 0;
   G.discard.push(...G.hands[ti]); G.hands[ti] = [];
-  log(G, `${t.name} ออกจากเกม`);
+  log(G, 'out', { a: t.name });
   if (si != null && si !== ti && G.mode === 'soul' && G.seats[si].alive) G.seats[si].soul += 2;
 }
 function die(G, ti, si) {
   const h = G.hands[ti], ri = h.findIndex(c => c.key === 'sp7');
-  if (ri >= 0) { G.exiled.push(h.splice(ri, 1)[0]); G.seats[ti].hp = 5; pop(G, ti, '+5'); log(G, `${G.seats[ti].name} ใช้ไพ่คืนชีพ ฟื้นด้วย 5 HP`); return; }
+  if (ri >= 0) { G.exiled.push(h.splice(ri, 1)[0]); G.seats[ti].hp = 5; pop(G, ti, '+5'); log(G, 'revive', { a: G.seats[ti].name }); return; }
   kill(G, ti, si);
 }
 function heal(G, i, n) { const s = G.seats[i], b = s.hp; s.hp = Math.min(MAXHP, s.hp + n); if (s.hp > b) pop(G, i, '+' + (s.hp - b)); }
 function addShield(G, i, n) { const s = G.seats[i]; s.shield = Math.min(SHIELD_CAP, s.shield + n); pop(G, i, '🛡+' + n); }
 function guarded(G, ti, kind) {
   const t = G.seats[ti];
-  if (t.blockAny) { t.blockAny = false; pop(G, ti, '🛡'); log(G, `${t.name} ป้องกันไว้ได้`); return true; }
-  if (kind === 'atk' && t.blockAtk) { t.blockAtk = false; pop(G, ti, '🛡'); log(G, `${t.name} หลบการโจมตี`); return true; }
+  if (t.blockAny) { t.blockAny = false; pop(G, ti, '🛡'); log(G, 'blocked', { a: t.name }); return true; }
+  if (kind === 'atk' && t.blockAtk) { t.blockAtk = false; pop(G, ti, '🛡'); log(G, 'dodged', { a: t.name }); return true; }
   return false;
 }
 function curse(G, ti, turns) {
   const t = G.seats[ti];
-  if (t.ward > 0) { t.ward--; pop(G, ti, 'ปัด'); log(G, `${t.name} ป้องกันคำสาปไว้ได้`); return false; }
-  t.curse = Math.max(t.curse, turns); pop(G, ti, 'curse'); log(G, `${t.name} ติดคำสาป`); return true;
+  if (t.ward > 0) { t.ward--; pop(G, ti, 'ward'); log(G, 'wardcurse', { a: t.name }); return false; }
+  t.curse = Math.max(t.curse, turns); pop(G, ti, 'curse'); log(G, 'cursed', { a: t.name }); return true;
 }
 function attack(G, si, ti, d, o) {
   o = o || {};
@@ -153,16 +153,16 @@ function attack(G, si, ti, d, o) {
     t.redirect = false;
     const c = []; S.forEach((s, i) => { if (s.alive && i !== ti && i !== si) c.push(i); });
     const ni = c.length ? c[Math.random() * c.length | 0] : si;
-    log(G, `${t.name} เปลี่ยนเป้าหมายการโจมตีไปที่ ${S[ni].name}`);
+    log(G, 'redirect', { a: t.name, b: S[ni].name });
     return attack(G, si, ni, d, Object.assign({}, o, { noRedirect: true }));
   }
   if (guarded(G, ti, 'atk')) return false;
   if (!o.reflected && t.reflectAll) {
-    t.reflectAll = false; pop(G, ti, '↩'); log(G, `${t.name} สะท้อนความเสียหายกลับ`);
+    t.reflectAll = false; pop(G, ti, '↩'); log(G, 'reflect', { a: t.name });
     attack(G, ti, si, d, { reflected: true, noRedirect: true }); return false;
   }
   if (!o.reflected && t.reflectN) {
-    const r = t.reflectN; t.reflectN = 0; pop(G, ti, '↩'); log(G, `${t.name} สะท้อนความเสียหาย ${r}`);
+    const r = t.reflectN; t.reflectN = 0; pop(G, ti, '↩'); log(G, 'reflectn', { a: t.name, n: r });
     attack(G, ti, si, r, { reflected: true, noRedirect: true });
   }
   if (t.curse > 0) d += 1;
@@ -171,15 +171,15 @@ function attack(G, si, ti, d, o) {
   if (ab > 0) pop(G, ti, '🛡');
   t.hp = Math.max(0, t.hp - d);
   if (d > 0) pop(G, ti, '-' + d);
-  log(G, `${src.name} ทำให้ ${t.name} เสีย ${d} HP${ab ? ` (โล่กัน ${ab})` : ''}`);
-  if (G.mode === 'soul' && o.card && d >= 4 && src.alive) { src.soul++; log(G, `${src.name} ได้ +1 แต้มวิญญาณ`); }
+  log(G, 'hit', { a: src.name, b: t.name, n: d, v: ab });
+  if (G.mode === 'soul' && o.card && d >= 4 && src.alive) { src.soul++; log(G, 'soul', { a: src.name }); }
   if (t.hp <= 0) die(G, ti, si);
   return true;
 }
 function reveal(G, ti, n) {
   const s = G.seats[ti], pool = G.hands[ti].filter(c => !s.shown.includes(c.id));
   shuffle(pool).slice(0, n).forEach(c => s.shown.push(c.id));
-  log(G, `เปิดเผยไพ่ของ ${s.name}`);
+  log(G, 'reveal', { a: s.name });
 }
 // ----- discard-pick helpers (JOKER / Sorcerer K / Time-spirit 10) -----
 function cands(G, c) {
@@ -197,11 +197,11 @@ function needTarget(G, c, pick) {
 function copyEff(G, si, ti, ctx, c) {
   const list = cands(G, c);
   let src = list.find(x => x.id === ctx.pick) || (list.length ? bestDiscard(G, list) : null);
-  if (!src) { log(G, 'ไม่มีไพ่ในกองทิ้งให้ใช้'); return; }
+  if (!src) { log(G, 'nodisc'); return; }
   if ((ctx.depth || 0) >= 2) return;
-  if (c.key === 'p9') { const k = G.discard.indexOf(src); G.discard.splice(k, 1); G.hands[si].push(src); log(G, `${G.seats[si].name} เรียก ${cn(src)} กลับขึ้นมือ`); return; }
-  log(G, `ใช้ความสามารถของ ${cn(src)}`);
-  if (src.t && !(Number.isInteger(ti) && ti !== si && G.seats[ti] && G.seats[ti].alive)) { log(G, 'ไม่มีเป้าหมาย'); return; }
+  if (c.key === 'p9') { const k = G.discard.indexOf(src); G.discard.splice(k, 1); G.hands[si].push(src); log(G, 'recall', { a: G.seats[si].name, k: src.key, r: src.r }); return; }
+  log(G, 'copied', { k: src.key, r: src.r });
+  if (src.t && !(Number.isInteger(ti) && ti !== si && G.seats[ti] && G.seats[ti].alive)) { log(G, 'notarget'); return; }
   EFF[src.key](G, si, ti, true, { pick: null, depth: (ctx.depth || 0) + 1 }, src);
 }
 // ----- effects -----
@@ -216,11 +216,11 @@ Object.assign(EFF, {
   g0: A(1, null, (G, si) => xdraw(G, si, 1)),
   g1: A(2), g2: A(3), g3: A(4), g4: A(5),
   g5: A(3, null, (G, si) => addShield(G, si, 2)),
-  g6: A(4, null, (G, si, ti) => { G.seats[ti].noExtra = true; log(G, `${G.seats[ti].name} จั่วเพิ่มไม่ได้`); }),
+  g6: A(4, null, (G, si, ti) => { G.seats[ti].noExtra = true; log(G, 'noextra', { a: G.seats[ti].name }); }),
   g7: A(3, null, (G, si) => { G.seats[si].curse = 0; }),
   g8: A(5, { breakShield: 1 }),
   g9: A(5, { cut: 2 }),
-  g10: self((G, si) => { G.seats[si].boost += 3; log(G, `${G.seats[si].name} เพิ่มพลังโจมตีใบถัดไป +3`); }),
+  g10: self((G, si) => { G.seats[si].boost += 3; log(G, 'boost', { a: G.seats[si].name }); }),
   g11: self((G, si) => heal(G, si, 4)),
   g12: A(5, null, (G, si) => { if (G.mode === 'soul') G.seats[si].soul++; }),
   r0: A(1, { cut: 1 }),
@@ -232,9 +232,9 @@ Object.assign(EFF, {
   r6: A(4, null, (G, si, ti) => { G.seats[ti].bleed += 1; }),
   r7: A(4, null, (G, si, ti) => reveal(G, ti, 2)),
   r8: A(5, null, (G, si, ti) => curse(G, ti, 1)),
-  r9: A(5, null, (G, si, ti) => { G.seats[ti].sealed = Math.max(G.seats[ti].sealed, 1); log(G, `${G.seats[ti].name} ถูกผนึก`); }),
+  r9: A(5, null, (G, si, ti) => { G.seats[ti].sealed = Math.max(G.seats[ti].sealed, 1); log(G, 'sealed', { a: G.seats[ti].name, n: 1 }); }),
   r10: self((G, si) => { G.seats[si].reflectAll = true; }),
-  r11: hostile((G, si, ti) => { G.seats[ti].skip = true; log(G, `${G.seats[ti].name} ตาพร่า`); }),
+  r11: hostile((G, si, ti) => { G.seats[ti].skip = true; log(G, 'blind', { a: G.seats[ti].name }); }),
   r12: A(5, null, (G, si, ti) => { G.seats[ti].bleed += 2; }),
   b0: self((G, si) => addShield(G, si, 2)),
   b1: self((G, si) => heal(G, si, 2)),
@@ -246,34 +246,34 @@ Object.assign(EFF, {
   b7: (G, si, ti, X) => { heal(G, si, 4); if (X) addShield(G, si, 2); },
   b8: (G, si, ti, X) => { addShield(G, si, 6); if (X) G.seats[si].ward++; },
   b9: (G, si, ti, X) => { heal(G, si, 5); if (X) addShield(G, si, 3); },
-  b10: self((G, si) => { const s = G.seats[si]; s.curse = 0; s.noDraw = false; s.noExtra = false; s.skip = false; s.sealed = 0; s.bleed = 0; s.showAll = 0; s.shown = []; log(G, `${s.name} ล้างสถานะผิดปกติ`); }),
+  b10: self((G, si) => { const s = G.seats[si]; s.curse = 0; s.noDraw = false; s.noExtra = false; s.skip = false; s.sealed = 0; s.bleed = 0; s.showAll = 0; s.shown = []; log(G, 'cleanse', { a: s.name }); }),
   b11: self((G, si) => { G.seats[si].blockAtk = true; }),
   b12: self((G, si) => { addShield(G, si, 5); G.seats[si].reflectN = 2; }),
   p0: (G, si) => {
-    if (G.seats[si].noExtra) { log(G, 'จั่วเพิ่มไม่ได้'); return; }
+    if (G.seats[si].noExtra) { log(G, 'noextra', { a: G.seats[si].name }); return; }
     const top = pull(G); if (top) G.pending = { seat: si, kind: 'peek', cards: [top] };
   },
   p1: (G, si, ti) => reveal(G, ti, 1),
   p2: hostile((G, si, ti) => {
     const a = G.hands[si], b = G.hands[ti]; if (!a.length || !b.length) return;
     const i = Math.random() * a.length | 0, j = Math.random() * b.length | 0; [a[i], b[j]] = [b[j], a[i]];
-    log(G, `${G.seats[si].name} สลับไพ่กับ ${G.seats[ti].name}`);
+    log(G, 'swapcards', { a: G.seats[si].name, b: G.seats[ti].name });
   }),
   p3: (G, si) => {
-    if (G.seats[si].noExtra) { log(G, 'จั่วเพิ่มไม่ได้'); return; }
+    if (G.seats[si].noExtra) { log(G, 'noextra', { a: G.seats[si].name }); return; }
     const a = pull(G), b = pull(G);
     if (a && b) G.pending = { seat: si, kind: 'draw2', cards: [a, b] }; else if (a) G.hands[si].push(a);
   },
   p4: self((G, si) => { G.seats[si].blockAtk = true; }),
-  p5: hostile((G, si, ti) => { G.seats[ti].sealed = Math.max(G.seats[ti].sealed, 1); log(G, `${G.seats[ti].name} ถูกผนึก`); }),
-  p6: hostile((G, si, ti) => { const n = Math.min(2, G.seats[ti].shield); G.seats[ti].shield -= n; G.seats[si].shield = Math.min(SHIELD_CAP, G.seats[si].shield + n); log(G, `${G.seats[si].name} ขโมยโล่ ${n}`); }),
-  p7: (G, si, ti) => { G.seats[ti].showAll = 1; log(G, `เปิดไพ่ทั้งมือของ ${G.seats[ti].name}`); },
+  p5: hostile((G, si, ti) => { G.seats[ti].sealed = Math.max(G.seats[ti].sealed, 1); log(G, 'sealed', { a: G.seats[ti].name, n: 1 }); }),
+  p6: hostile((G, si, ti) => { const n = Math.min(2, G.seats[ti].shield); G.seats[ti].shield -= n; G.seats[si].shield = Math.min(SHIELD_CAP, G.seats[si].shield + n); log(G, 'steal', { a: G.seats[si].name, n }); }),
+  p7: (G, si, ti) => { G.seats[ti].showAll = 1; log(G, 'revealall', { a: G.seats[ti].name }); },
   p8: self((G, si) => { G.seats[si].blockAny = true; }),
   p9: (G, si, ti, X, ctx, c) => copyEff(G, si, ti, ctx, c),
   p10: self((G, si) => { G.seats[si].redirect = true; }),
-  p11: hostile((G, si, ti) => { const p = G.seats[si]; if (p.curse > 0) { p.curse = 0; curse(G, ti, 1); } else log(G, 'ไม่มีคำสาปให้ย้าย'); }),
+  p11: hostile((G, si, ti) => { const p = G.seats[si]; if (p.curse > 0) { p.curse = 0; curse(G, ti, 1); } else log(G, 'nocurse'); }),
   p12: (G, si, ti, X, ctx, c) => copyEff(G, si, ti, ctx, c),
-  sp1: hostile((G, si, ti) => { G.seats[ti].skip = true; log(G, `${G.seats[ti].name} ตาพร่า`); }),
+  sp1: hostile((G, si, ti) => { G.seats[ti].skip = true; log(G, 'blind', { a: G.seats[ti].name }); }),
   sp2: A(3, null, (G, si, ti) => { G.seats[ti].bleed += 1; }),
   sp3: self((G, si) => { G.seats[si].blockAny = true; }),
   sp4: self((G, si) => { G.seats[si].reflectAll = true; }),
@@ -282,9 +282,9 @@ Object.assign(EFF, {
     a.hp = Math.min(MAXHP, hb); b.hp = Math.min(MAXHP, ha);
     if (a.hp !== ha) pop(G, si, (a.hp > ha ? '+' : '-') + Math.abs(a.hp - ha));
     if (b.hp !== hb) pop(G, ti, (b.hp > hb ? '+' : '-') + Math.abs(b.hp - hb));
-    log(G, `${a.name} สลับพลังชีวิตกับ ${b.name}`);
+    log(G, 'swaphp', { a: a.name, b: b.name });
   }),
-  sp6: hostile((G, si, ti) => { G.seats[ti].sealed = Math.max(G.seats[ti].sealed, 2); log(G, `${G.seats[ti].name} ถูกผนึก 2 เทิร์น`); }),
+  sp6: hostile((G, si, ti) => { G.seats[ti].sealed = Math.max(G.seats[ti].sealed, 2); log(G, 'sealed', { a: G.seats[ti].name, n: 2 }); }),
   sp7: () => {},
   sp8: (G, si, ti, X, ctx, c) => copyEff(G, si, ti, ctx, c),
 });
@@ -292,8 +292,8 @@ function sealedOut(c, p) { return p.sealed > 0 && (c.x || c.s === 'p' || isFace(
 function play(G, si, c, ti, ctx) {
   const p = G.seats[si], h = G.hands[si];
   h.splice(h.indexOf(c), 1); G.discard.push(c); G.last = c;
-  log(G, `${p.name} ใช้ ${cn(c)}`);
-  if (sealedOut(c, p)) { log(G, `${p.name} ถูกผนึก ไพ่ไม่ทำงาน`); return; }
+  log(G, 'use', { a: p.name, k: c.key, r: c.r });
+  if (sealedOut(c, p)) { log(G, 'sealedout', { a: p.name }); return; }
   EFF[c.key](G, si, ti, !(p.sealed > 0), ctx || {}, c);
 }
 function resolvePending(G, pick) {
@@ -317,7 +317,7 @@ function checkOver(G) {
 }
 function trim(G, i) {
   const h = G.hands[i];
-  while (h.length > 7) { const w = h.reduce((m, c) => val(c) < val(m) ? c : m); h.splice(h.indexOf(w), 1); G.discard.push(w); log(G, `${G.seats[i].name} ทิ้ง ${cn(w)} (เกิน 7 ใบ)`); }
+  while (h.length > 7) { const w = h.reduce((m, c) => val(c) < val(m) ? c : m); h.splice(h.indexOf(w), 1); G.discard.push(w); log(G, 'trim', { a: G.seats[i].name, k: w.key, r: w.r }); }
 }
 function endTurn(G, now) {
   trim(G, G.turn); tick(G, G.turn);
@@ -332,7 +332,7 @@ function act(G, si, a, now) {
   if (G.pending) {
     if (G.pending.seat !== si || a.type !== 'choose') throw 'ต้องเลือกไพ่ก่อน';
     resolvePending(G, a.pick | 0);
-  } else if (a.type === 'pass') log(G, `${G.seats[si].name} ข้ามเทิร์น`);
+  } else if (a.type === 'pass') log(G, 'pass', { a: G.seats[si].name });
   else if (a.type === 'play') {
     const c = G.hands[si].find(x => x.id === a.card);
     if (!c) throw 'ไม่มีไพ่ใบนี้ในมือ';
@@ -355,7 +355,7 @@ function act(G, si, a, now) {
 function timeout(G, si, now) {
   const p = G.seats[si]; G.evt = [];
   p.afk = (p.afk || 0) + 1;
-  log(G, `${p.name} หมดเวลา`);
+  log(G, 'timeout', { a: p.name });
   if (p.afk >= 2) { forfeit(G, si, now); return; }
   if (G.pending) autoPending(G);
   endTurn(G, now);
@@ -407,7 +407,7 @@ function botTurn(G, si, now) {
   const strong = opp.slice().sort((a, b) => S[b].hp - S[a].hp)[0];
   G.evt = [];
   const sc = h.map(c => [score(G, si, c, weak) + Math.random(), c]).sort((a, b) => b[0] - a[0]);
-  if (!sc.length || sc[0][0] < 0) log(G, `${S[si].name} ข้ามเทิร์น`);
+  if (!sc.length || sc[0][0] < 0) log(G, 'pass', { a: S[si].name });
   else {
     const c = sc[0][1];
     let pick = null; const list = cands(G, c); if (list.length) pick = bestDiscard(G, list).id;
