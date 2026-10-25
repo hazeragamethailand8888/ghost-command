@@ -70,6 +70,21 @@ const SFX = {
   click: () => tone(300, 0.06, 'square', 0.05),
   scream: () => { tone(500, 0.9, 'sawtooth', 0.24, 1400); tone(530, 0.9, 'sawtooth', 0.2, 1350); tone(95, 1.8, 'square', 0.22, 40); noise(1.8, 0.5, 1800); tone(720, 0.9, 'sawtooth', 0.22, 1700, 0.7); noise(0.8, 0.4, 2500, 0.7); },
 };
+/* real scream recordings (random pick, never the same twice in a row); synthetic scream is the fallback */
+const SCREAMS = [['scream1.mp3', 2.6], ['scream2.mp3', 3.5], ['scream3.mp3', 3.5], ['scream4.mp3', 2.8]];
+const SCREAM_BUF = []; let lastScream = -1;
+function loadScreams() {
+  const a = ac(); if (!a) return;
+  SCREAMS.forEach(async ([f], i) => { try { const r = await fetch(f); SCREAM_BUF[i] = await a.decodeAudioData(await r.arrayBuffer()); } catch (e) {} });
+}
+function playScream() {            // returns how long the jump scare should last (seconds)
+  const a = ac(), have = SCREAM_BUF.map((b, i) => b ? i : -1).filter(i => i >= 0);
+  if (!a || !have.length) { sfx('scream'); return 2.0; }
+  const pool = have.filter(i => i !== lastScream), pick = (pool.length ? pool : have)[Math.random() * (pool.length ? pool.length : have.length) | 0];
+  lastScream = pick;
+  const s = a.createBufferSource(); s.buffer = SCREAM_BUF[pick]; s.connect(SX); s.start();
+  return Math.max(2.2, SCREAM_BUF[pick].duration);
+}
 function sfx(k) { try { SFX[k] && SFX[k](); } catch (e) {} }
 function ambient() {
   const a = ac(); if (!a || amb) return;
@@ -83,8 +98,9 @@ async function scare() {
   await sleep(450);
   const d = document.createElement('div'); d.id = 'scare';
   { const k = Math.random() * 8 | 0; d.innerHTML = '<div class="g i-s' + k + '" style="background-position:50% ' + (38 - 120 * [.09, .09, .37, .13, .07, .31, .12, .06][k]).toFixed(1) + 'vh;--z:' + [1, 1, .55, 1, 1, 1, 1, 1][k] + '"></div>'; }
-  document.body.appendChild(d); sfx('scream');
-  await sleep(2000); d.remove(); if (amb) amb.gain.value = 0.06; ui.scaring = 0;
+  document.body.appendChild(d);
+  const dur = playScream(); d.style.animationDuration = dur + 's,.08s'; d.firstChild.style.animationDuration = dur + 's';
+  await sleep(dur * 1000); d.remove(); if (amb) amb.gain.value = 0.06; ui.scaring = 0;
 }
 
 /* ---------- account & wallet (Firestore: users/{uid}) ---------- */
@@ -545,7 +561,7 @@ document.addEventListener('click', async e => {
   const b = e.target.closest('[data-a]'); if (!b || b.disabled) return;
   const a = b.dataset.a, v = b.dataset.v; sfx('click');
   if (a === 'enter') {
-    ui.scr = user ? 'menu' : 'auth'; ambient();
+    ui.scr = user ? 'menu' : 'auth'; ambient(); loadScreams();
     try { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {}); screen.orientation.lock('landscape').catch(() => {}); } catch (x) {}
     render(); if (user) afterEnter();
   }
@@ -581,4 +597,5 @@ document.addEventListener('click', async e => {
   else if (a === 'choose') doAct({ type: 'choose', pick: +b.dataset.i });
   else if (a === 'tgt') { ui.dlg = null; if (ui.pl) doAct({ type: 'play', card: ui.pl.card, pick: ui.pl.pick, target: +b.dataset.i }); else render(); }
 });
+if (location.search.includes('gctest=1')) window.__gc = { scare, ui };
 applyLang(); applyVol(); render(); boot();

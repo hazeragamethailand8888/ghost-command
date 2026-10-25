@@ -1,16 +1,21 @@
 <!doctype html>
-<html lang="th">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>GHOST COMMAND</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@600;800&family=Sarabun:wght@400;600&display=swap">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#060304">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="art.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app"></div>
-<div id="rot"><i>📱</i><div class="serif" style="font-size:20px">หมุนจอเป็นแนวนอน</div><div style="color:var(--mut)">GHOST COMMAND เล่นในแนวนอนเท่านั้น</div></div>
+<div id="rot"><i>📱</i><div class="serif" style="font-size:20px">Rotate your phone to landscape</div><div style="color:var(--mut)">GHOST COMMAND is played in landscape</div></div>
 <script type="module" src="app.js"></script>
+<script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}</script>
 </body>
 </html>
